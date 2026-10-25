@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 <url>
 <loc>https://alexandermisel.github.io/blog/</loc>
-<lastmod>2024-01-20T08:49:21+00:00</lastmod>
+<lastmod>2026-10-25T17:01:23+08:00</lastmod>
 </url>
 <url>
 <loc>https://alexandermisel.github.io/blog/links.html</loc>
@@ -74,7 +74,7 @@
 </url>
 <url>
 <loc>https://alexandermisel.github.io/blog/post/how-to-still-develop-frontend-in-win7.html</loc>
-<lastmod>2024-01-20T08:49:21+00:00</lastmod>
+<lastmod>2024-01-20T08:49:21Z</lastmod>
 </url>
 <url>
 <loc>https://alexandermisel.github.io/blog/post/js-geo-processing.html</loc>
@@ -107,6 +107,10 @@
 <url>
 <loc>https://alexandermisel.github.io/blog/post/peg-practice-continued.html</loc>
 <lastmod>2021-06-18T12:36:12+08:00</lastmod>
+</url>
+<url>
+<loc>https://alexandermisel.github.io/blog/post/pi-web-to-vinext.html</loc>
+<lastmod>2026-10-25T20:23:33+08:00</lastmod>
 </url>
 <url>
 <loc>https://alexandermisel.github.io/blog/post/qqbot-rebirth.html</loc>
