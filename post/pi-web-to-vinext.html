@@ -506,12 +506,12 @@ export default defineConfig({
 
 <h3>磁盘上的产物</h3>
 
-<p>这是我最喜欢的一张图，因为它同时说明了两件事：Vite 不留构建缓存，以及 Next 那 695 MB 到底是些什么。两张treemap 用<b>同一个比例尺</b>——<code>dist</code> 之所以缩成右上角一个小方块，就是它本来的样子。悬停任何一块可以看它的构成。</p>
+<p>这是我最喜欢的一张图，因为它同时说明了两件事：Vite 不留构建缓存，以及 Next 那 695 MB 到底是些什么。上半部分是<b>同一线性比例尺</b>下的两根条——<code>dist</code> 之所以只剩一条细线，就是它本来的样子；下半部分按同样颜色放大，把两边的构成拆开，免得细到看不见。</p>
 
 <div class="chart reveal" id="chart-disk">
   <div class="chart-head">
     <span class="chart-title">构建产物占用的磁盘空间</span>
-    <span class="chart-sub">同一比例尺 · 面积 = 大小 · 单位 MB</span>
+    <span class="chart-sub">同一线性比例尺 · 长度 = 大小 · 单位 MB</span>
   </div>
   <div class="chart-body"><svg id="svg-disk" viewBox="0 0 760 322" role="img" aria-label="磁盘占用 treemap"></svg></div>
   <div class="legend" id="legend-disk"></div>
@@ -618,14 +618,15 @@ export default defineConfig({
 
 <h3>还有一项是变慢的</h3>
 
-<p>为了不把这篇写成软文，这一项也得放上来：生产服务器就绪的时间，Next 是 0.50 秒，vinext 是 1.27 秒，<strong>慢了 2.5 倍</strong>。日常是常驻进程，影响有限；但如果你在 CI 里频繁起停服务，或者拿它做 serverless，这一项要算进成本。</p>
+<p>为了不把这篇写成软文，这一项也得放上来：生产服务器就绪的时间。我各跑了三次——第一遍我还只跑了一次，得出「慢 2.5 倍」，写完自己都心惊，补跑才发现 vinext 的首次启动撞上了冷缓存。稳定下来是 <strong>Next 0.48 秒、vinext 0.56–0.66 秒，慢大约 0.1 秒</strong>。日常是常驻进程，这点差别无所谓；但它是全文唯一一项变慢的指标，得记在这。</p>
 
 <div class="chart reveal" id="chart-start">
   <div class="chart-head">
     <span class="chart-title">生产服务器就绪时间</span>
-    <span class="chart-sub">从启动到首页返回 200 · 单位秒 · 越低越好</span>
+    <span class="chart-sub">中位数相差 0.18 秒（1.4×）· 三次独立启动</span>
   </div>
-  <div class="chart-body"><svg id="svg-start" viewBox="0 0 760 130" role="img" aria-label="生产服务器就绪时间"></svg></div>
+  <div class="chart-body"><svg id="svg-start" viewBox="0 0 760 174" role="img" aria-label="生产服务器就绪时间，三次测量"></svg></div>
+  <p class="chart-note">第一次启动明显更慢（Next 1.98 s、vinext 1.23 s），之后回落到 0.5 秒上下；文章写的是<b>后两次的稳定值</b>。这也是我一开始只跑一次会得出「慢 2.5 倍」的原因。</p>
 </div>
 
 <h2 id="table"><span class="num">05</span>一张对照表<a href="#table" class="anchor" aria-label="Permalink">#</a></h2>
@@ -644,7 +645,7 @@ export default defineConfig({
     <tr><td>配置文件</td><td class="num">next.config.ts</td><td class="num">next-config.ts + vite.config.ts</td></tr>
     <tr><td>发布包（tarball）</td><td class="num">6.85 MB</td><td class="num">5.86 MB</td></tr>
     <tr><td>首屏下载（raw / gzip）</td><td class="num">3722 / 1087 KiB</td><td class="num">3767 / 1100 KiB</td></tr>
-    <tr><td>生产服务器就绪</td><td class="num">0.50 s</td><td class="num">1.27 s</td></tr>
+    <tr><td>生产服务器就绪（3 次中位数）</td><td class="num">0.48 s</td><td class="num">0.56 s</td></tr>
   </tbody>
 </table>
 </div>
@@ -674,11 +675,13 @@ page.on("response", async (r) =&gt; {
 
 <h2 id="verdict"><span class="num">07</span>写在最后<a href="#verdict" class="anchor" aria-label="Permalink">#</a></h2>
 
-<p>搬迁本身花了一天，其中小半天是在排查那个 Bun 的 <code>Request</code> bug——我从怀疑 vinext 开始，最后发现问题在运行时里躺了很久。真正让我决定迁完不迁回去的瞬间很朴素：第一次改完一行代码再构建，只等了五秒。之前那半分钟里，我通常会顺手去刷会儿手机。</p>
+<p><strong>vinext 推荐吗？我的答案是：看项目，但我自己是推荐的。</strong>如果你也是一个人维护一个本机或小规模部署的 Next.js 应用，并且有测试兜底，那每次构建从半分钟变成五秒，是会改变你写代码节奏的事——我现在敢在发布前反复重建了。反过来，如果你的项目在首屏性能、SEO 或者边缘部署上有硬指标，它帮不上忙：我实测首屏字节数一模一样，该做的拆包、缓存、流式渲染一点都少不了。</p>
 
-<p>这次也更让我信一件事：<strong>测试跑起来之前，什么都不算验证完</strong>。三个坑里有两个是浏览器端到端测试逮到的，单测全绿、类型干净、构建成功，一样看不出来。</p>
+<p><strong>最有意思的发现是：换构建工具会把运行时里潜伏的 bug 激活。</strong>dev 下所有 <code>POST</code> 变成 <code>GET</code> 那个坑，我第一反应是 vinext 写错了，还给它提了 issue。维护者在自己的 Node 上复现不了，直接把 issue 关了。回头写最小复现才发现，问题是 Bun 的 <code>new Request(input, init)</code> 在 init 没有 <code>method</code> 时不回落——Next 自己的 dev server 不这么构造请求，所以这个 bug 在我们的代码里躺了一年多，硬是没人踩到。换掉打包器的那一刻，它醒了。</p>
 
-<p>迁移之后的日常：构建五秒，产物目录 19 MB，CI 里少下一半的东西。首屏该多快还是多快——那部分是另一件事，和换不换打包器没关系。</p>
+<p>另外两个发现也值得说。一个是 Vite 的模块运行器会给 dev 环境注入一份<strong>没有 <code>mkdir</code> 的 <code>fs</code></strong>，于是 <code>proper-lockfile</code> 一加锁就 500——这类「打包器替身模块」的坑，文档里不会写，只有真跑起来才会撞上。另一个更隐蔽：生产构建会把动态 <code>import()</code> 拆出独立 chunk，页面一跳转这个 fetch 就被中断，WebKit 报 <code>Importing a module script failed</code>，而同样的代码在 Chrome 上一点事没有。<strong>不测浏览器，你根本不知道自己的应用在坏。</strong></p>
+
+<p>还有一件我判断错过的事：服务器启动时间。我最初只跑了一次，得出「vinext 慢 2.5 倍」，数字好看得可疑。补跑到三次才发现那是冷缓存，真实差距只有 0.1 秒左右。这篇文章里被我自己的单次测量推翻过两次，所以上面每个数字都标了跑了几次。</p>
 
 <p>项目在这边：<a href="https://github.com/brynne8/pi-web-bun">pi-web-bun</a>（迁移在 <code>try/vinext</code> 分支），vinext 在 <a href="https://github.com/cloudflare/vinext">cloudflare/vinext</a>，Bun 那个 bug 的修复进展在 <a href="https://github.com/oven-sh/bun/pull/46528">oven-sh/bun#46528</a>。要是你也在折腾同样的东西，欢迎来聊聊。</p>
 
@@ -873,72 +876,73 @@ page.on("response", async (r) =&gt; {
   }
   racePlay.addEventListener("click", runRace);
 
-  /* ================= chart: disk treemap ================= */
-  function squarify(items, x, y, w, h) {
-    var out = [];
-    var cx = x, cy = y, cw = w, ch = h;
-    var rest = items.reduce(function (s, i) { return s + i.value; }, 0);
-    items.forEach(function (it, idx) {
-      var frac = it.value / rest;
-      if (idx === items.length - 1 || frac <= 0) {
-        out.push({ item: it, x: cx, y: cy, w: cw, h: ch });
-        return;
-      }
-      var horizontal = cw >= ch;
-      var take = horizontal ? cw * frac : ch * frac;
-      if (horizontal) {
-        out.push({ item: it, x: cx, y: cy, w: take, h: ch });
-        cx += take; cw -= take;
-      } else {
-        out.push({ item: it, x: cx, y: cy, w: cw, h: take });
-        cy += take; ch -= take;
-      }
-      rest -= it.value;
-    });
-    return out;
-  }
+  /* ================= chart: disk, same scale + magnified ================= */
   function drawDisk(W) {
     var svg = document.getElementById("svg-disk");
     var narrow = W < 560;
-    var L = 14, T = 36, panelW = W - 28, panelH = narrow ? Math.max(120, W * 0.34) : 176;
+    var L = narrow ? 74 : 108, R = 92, T = 34;
+    var X0 = L, X1 = W - R;
+    var barW = X1 - X0;
     var totalNext = 727, totalVinext = 19;
-    var boxW = Math.sqrt(panelW * panelH * (totalVinext / totalNext));
-    var by = T + panelH + 34;
-    var H = by + boxW + 14;
+    var H = T + 210 + (narrow ? 26 : 34) + 118;
     svg.setAttribute("viewBox", "0 0 " + W + " " + H);
     svg.innerHTML = "";
-    text(svg, ".next/", { x: L, y: 18, "class": "lbl", "font-size": 13, fill: "#fff" });
-    text(svg, "727 MB · Next.js 16 · 面积按同一比例尺", { x: L + 56, y: 18, "class": "lbl" });
-    var cells = squarify(DISK.next.slice().sort(function (a, b) { return b.value - a.value; }), L, T, panelW, panelH);
-    cells.forEach(function (c) {
-      var big = c.w > 96 && c.h > 26;
-      var r = el("rect", { x: c.x, y: c.y, width: Math.max(0, c.w - 2), height: Math.max(0, c.h - 2), rx: 2,
-        fill: c.item.kind === "cache" ? "#3a3a3e" : "#5c5c60", stroke: "#0d0a0c", "stroke-width": 1 }, svg);
-      bindTip(r, "<b>.next/" + c.item.name + "</b><br><span class='k'>大小</span> <span class='va'>" + c.item.value + " MB</span><br><span class='k'>占 .next</span> <span class='v'>" + (c.item.value / totalNext * 100).toFixed(1) + "%</span>");
-      if (big) {
-        text(svg, c.item.name, { x: c.x + 9, y: c.y + 19, fill: "#fff", "font-size": 12 });
-        text(svg, c.item.value + " MB · 占 " + (c.item.value / totalNext * 100).toFixed(0) + "%", { x: c.x + 9, y: c.y + 35, fill: "rgba(255,255,255,.62)", "font-size": 11 });
-      }
+    var pct = function (v) { return (v / totalNext) * barW; };
+
+    // ---- part 1: same linear scale ----
+    text(svg, "同一线性比例尺", { x: X0, y: 18, "class": "lbl", "font-size": 12.5, fill: "#fff" });
+    // .next bar
+    var yA = T;
+    text(svg, ".next/", { x: X0 - 12, y: yA + 22, "text-anchor": "end", fill: "#fff", "font-size": 12.5 });
+    text(svg, "Next.js 16", { x: X0 - 12, y: yA + 38, "text-anchor": "end", "class": "lbl" });
+    el("rect", { x: X0, y: yA, width: barW, height: 34, fill: "#3a3a3e", rx: 2 }, svg);
+    var realW = Math.max(2, pct(35));
+    el("rect", { x: X0 + barW - realW, y: yA, width: realW, height: 34, fill: "#7a7a7e", rx: 2 }, svg);
+    text(svg, "727 MB", { x: X1 + 10, y: yA + 22, "class": "val", "font-size": 12.5 });
+    bindTip(el("rect", { x: X0, y: yA - 8, width: barW, height: 50, "class": "hit" }, svg),
+      "<b>.next/ 合计 727 MB</b><hr><span class='k'>webpack 持久化缓存</span> <span class='va'>695 MB · 96%</span><br><span class='k'>真实产物</span> <span class='va'>35 MB · 4%</span><br><span class='k'>└ server 22 · static 9 · trace 3 · types 0.9</span>");
+    text(svg, "webpack 缓存 695 MB（96%）", { x: X0 + 12, y: yA + 22, fill: "rgba(255,255,255,.92)", "font-size": 12 });
+    text(svg, "真实产物 35 MB →", { x: X1 - 8, y: yA + 22, "text-anchor": "end", fill: "#0d0a0c", "font-size": 11, "font-weight": 700 });
+    // dist bar
+    var yB = yA + 62;
+    text(svg, "dist/", { x: X0 - 12, y: yB + 22, "text-anchor": "end", fill: "#fff", "font-size": 12.5 });
+    text(svg, "vinext", { x: X0 - 12, y: yB + 38, "text-anchor": "end", "class": "lbl" });
+    var distW = Math.max(3, pct(totalVinext));
+    el("rect", { x: X0, y: yB, width: distW, height: 34, fill: "#ff2e97", rx: 2 }, svg);
+    el("rect", { x: X0, y: yB, width: distW * 0.53, height: 34, fill: "#c2185b", rx: 2 }, svg);
+    text(svg, "19 MB", { x: X0 + distW + 10, y: yB + 22, "class": "val", "font-size": 12.5 });
+    bindTip(el("rect", { x: X0, y: yB - 8, width: Math.max(distW, 60), height: 50, "class": "hit" }, svg),
+      "<b>dist/ 合计 19 MB</b><hr><span class='k'>服务端产物</span> <span class='va'>10 MB · 53%</span><br><span class='k'>客户端产物</span> <span class='va'>8.8 MB · 47%</span>");
+    text(svg, "同一个比例尺下，vinext 的全部产物只有 .next 的 2.6%", { x: X0 + distW + 10, y: yB + 38, "class": "anno", "font-size": 11 });
+
+    // ---- part 2: magnified composition ----
+    var zoom = barW * 0.86 / 35;
+    var yC = yB + 62 + (narrow ? 20 : 30);
+    el("line", { x1: X0, x2: X1, y1: yC - 16, y2: yC - 16, stroke: "#28282b" }, svg);
+    text(svg, "放大 " + Math.round(0.86 * totalNext / 35) + "× 看构成（与上方同一颜色）", { x: X0, y: yC - 22, "class": "lbl", "font-size": 12, fill: "#fff" });
+    var rows = [
+      { label: ".next 真实产物", total: 35, parts: [{ n: "server 22", v: 22, c: "#7a7a7e" }, { n: "static 9", v: 9, c: "#9a9a9e" }, { n: "trace 3", v: 3, c: "#b4b4b8" }, { n: "types 0.9", v: 0.9, c: "#c8c8cc" }] },
+      { label: "dist 全部", total: 19, parts: [{ n: "server 10", v: 10, c: "#c2185b" }, { n: "client 8.8", v: 8.8, c: "#ff2e97" }] }
+    ];
+    rows.forEach(function (r, ri) {
+      var yy = yC + ri * 54;
+      text(svg, r.label, { x: X0 - 12, y: yy + 21, "text-anchor": "end", "class": "lbl", fill: "#fff", "font-size": 12 });
+      var acc = 0;
+      r.parts.forEach(function (p) {
+        var px = X0 + acc * zoom;
+        var pw = Math.max(2, p.v * zoom);
+        el("rect", { x: px, y: yy, width: pw, height: 30, fill: p.c, stroke: "#0d0a0c" }, svg);
+        if (pw > 34) text(svg, p.n, { x: px + pw / 2, y: yy + 19, "text-anchor": "middle", fill: "#0d0a0c", "font-size": 10.5, "font-weight": 700 });
+        bindTip(el("rect", { x: px, y: yy - 6, width: pw, height: 42, "class": "hit" }, svg),
+          "<b>" + r.label + " · " + p.n.split(" ")[0] + "</b><br><span class='k'>大小</span> <span class='v'>" + p.v + " MB</span><br><span class='k'>占该类</span> <span class='va'>" + (p.v / r.total * 100).toFixed(0) + "%</span>");
+        acc += p.v;
+      });
+      text(svg, r.total + " MB", { x: X0 + r.total * zoom + 10, y: yy + 19, "class": "val", "font-size": 11.5 });
+      text(svg, r.parts.map(function (p) { return p.n; }).join(" · "), { x: X0, y: yy + 44, "class": "anno", "font-size": 10.5 });
     });
-    text(svg, "dist/", { x: L, y: by - 9, "class": "lbl", "font-size": 13, fill: "#fff" });
-    text(svg, "19 MB · vinext", { x: L + 50, y: by - 9, "class": "lbl" });
-    var vcells = squarify(DISK.vinext.slice().sort(function (a, b) { return b.value - a.value; }), L, by, boxW, boxW);
-    vcells.forEach(function (c) {
-      var r = el("rect", { x: c.x, y: c.y, width: Math.max(0, c.w - 2), height: Math.max(0, c.h - 2), rx: 2,
-        fill: "#ff2e97", stroke: "#0d0a0c", "stroke-width": 1 }, svg);
-      bindTip(r, "<b>dist/" + c.item.name + "</b><br><span class='k'>大小</span> <span class='va'>" + c.item.value + " MB</span><br><span class='k'>占 dist</span> <span class='v'>" + (c.item.value / totalVinext * 100).toFixed(0) + "%</span>");
-      if (c.w > 52) text(svg, c.item.name + " " + c.item.value, { x: c.x + 7, y: c.y + 16, fill: "#fff", "font-size": 11 });
-    });
-    el("rect", { x: L, y: by, width: boxW, height: boxW, fill: "none", stroke: "#48484c", "stroke-dasharray": "3 3" }, svg);
-    if (narrow) {
-      text(svg, "同一比例尺下，vinext 的全部产物只有 .next 的 " + (totalVinext / totalNext * 100).toFixed(1) + "%", { x: L, y: by + boxW + 16, "class": "anno" });
-    } else {
-      text(svg, "← 同一比例尺下，vinext 的全部产物只有 .next 的 " + (totalVinext / totalNext * 100).toFixed(1) + "%", { x: L + boxW + 14, y: by + boxW / 2 - 4, "class": "anno" });
-      text(svg, "上面那个大方块是比例尺参照", { x: L + boxW + 14, y: by + boxW / 2 + 14, "class": "anno", "font-size": 10.5 });
-    }
     var lg = document.getElementById("legend-disk");
     lg.innerHTML = "<button type='button' aria-pressed='true'><i style='background:#3a3a3e'></i>webpack 持久化缓存 <b>695 MB</b></button>" +
-      "<button type='button' aria-pressed='true'><i style='background:#5c5c60'></i>真实产物 <b>35 MB</b></button>" +
+      "<button type='button' aria-pressed='true'><i style='background:#7a7a7e'></i>真实产物 <b>35 MB</b></button>" +
       "<button type='button' aria-pressed='true'><i style='background:#ff2e97'></i>vinext 全部产物 <b>19 MB</b></button>";
   }
 
@@ -1063,39 +1067,45 @@ page.on("response", async (r) =&gt; {
     });
   }
 
-  /* ================= chart: server start ================= */
+  /* ================= chart: server start, 3 runs each ================= */
+  var START_RUNS = { next: [1.98, 0.47, 0.48], vinext: [1.23, 0.66, 0.56] };
+  function median(a) { var s = a.slice().sort(function (x, y) { return x - y; }); return s[1]; }
   function drawStart(W) {
     var svg = document.getElementById("svg-start");
     var narrow = W < 560;
-    var L = narrow ? 56 : 130, R = 110, T = 26, ih = 44;
+    var L = narrow ? 50 : 100, R = narrow ? 16 : 116, T = 40;
     var iw = W - L - R;
-    svg.setAttribute("viewBox", "0 0 " + W + " " + (T + ih + 30));
+    var lanes = [["next", "next start", "#969694"], ["vinext", "vinext start", "#ff2e97"]];
+    var laneY = [T + 26, T + 76];
+    var axisY = T + 108;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + (axisY + 26));
     svg.innerHTML = "";
-    var maxV = 1.4;
-    var y = function (v) { return T + ih - (v / maxV) * ih; };
-    var g = el("g", { "class": "grid" }, svg);
-    [0, 0.35, 0.7, 1.05, 1.4].forEach(function (tv) {
-      el("line", { x1: L, x2: L + iw, y1: y(tv), y2: y(tv) }, g);
-      text(svg, tv.toFixed(2), { x: L - 9, y: y(tv) + 4, "text-anchor": "end" });
-    });
-    text(svg, "秒", { x: L - 9, y: T - 9, "text-anchor": "end" });
-    var bw = Math.min(120, iw * 0.32);
-    [{ label: "next start", v: START.next, cls: "bar-a", x: L + iw / 2 - bw - (narrow ? 16 : 30) },
-     { label: "vinext start", v: START.vinext, cls: "bar-b", x: L + iw / 2 + (narrow ? 16 : 30) }].forEach(function (d, i) {
-      var r = el("rect", { x: d.x, y: y(d.v), width: bw, height: T + ih - y(d.v), "class": d.cls, rx: 2 }, svg);
-      if (!reduced) {
-        var h = r.getAttribute("height");
-        r.setAttribute("height", 0); r.setAttribute("y", T + ih);
-        setTimeout(function () { r.style.transition = "y .7s var(--ease), height .7s var(--ease)"; r.setAttribute("y", y(d.v)); r.setAttribute("height", h); }, 80 + i * 90);
+    var maxV = 2.2;
+    var x = function (v) { return L + (v / maxV) * iw; };
+    text(svg, "每次启动到首页返回 200 · 每格 0.5 秒 · 三个读数为三次独立启动", { x: L, y: T - 14, "class": "anno" });
+    lanes.forEach(function (row, ri) {
+      var key = row[0], label = row[1], color = row[2];
+      var cy = laneY[ri];
+      var runs = START_RUNS[key], med = median(runs);
+      text(svg, label, { x: L - 12, y: cy + 4, "text-anchor": "end", fill: "#fff", "font-size": 12 });
+      el("line", { x1: x(Math.min.apply(null, runs)), x2: x(Math.max.apply(null, runs)), y1: cy, y2: cy, stroke: "#48484c", "stroke-width": 2 }, svg);
+      runs.forEach(function (v) { el("circle", { cx: x(v), cy: cy, r: 5, fill: color, stroke: "#0d0a0c" }, svg); });
+      el("line", { x1: x(med), x2: x(med), y1: cy - 12, y2: cy + 12, stroke: color, "stroke-width": 2 }, svg);
+      text(svg, "中位 " + med.toFixed(2) + " s", { x: x(med), y: cy - 17, "text-anchor": "middle", "class": "val", "font-size": 11 });
+      if (!narrow) {
+        text(svg, runs.map(function (v) { return v.toFixed(2); }).join("  "), { x: W - R + 12, y: cy + 4, "class": "lbl", "font-size": 11 });
+        text(svg, "三次读数", { x: W - R + 12, y: cy - 10, fill: "#80807e", "font-size": 9.5 });
       }
-      text(svg, fmt(d.v) + " s", { x: d.x + bw / 2, y: y(d.v) - 7, "text-anchor": "middle", "class": "val" });
-      text(svg, d.label, { x: d.x + bw / 2, y: T + ih + 18, "text-anchor": "middle", "class": "lbl", fill: "#fff", "font-size": 12 });
-      bindTip(el("rect", { x: d.x - 16, y: T, width: bw + 32, height: ih, "class": "hit" }, svg),
-        "<b>" + d.label + "</b><br><span class='k'>就绪耗时</span> <span class='v'>" + fmt(d.v) + " s</span>");
+      bindTip(el("rect", { x: L, y: cy - 20, width: iw, height: 40, "class": "hit" }, svg),
+        "<b>" + label + "</b> · 三次测量<br><span class='k'>读数</span> <span class='va'>" + runs.map(function (v) { return v.toFixed(2) + " s"; }).join(" / ") + "</span><br><span class='k'>中位数</span> <span class='v'>" + med.toFixed(2) + " s</span>");
     });
-    var chip = el("g", {}, svg);
-    el("rect", { x: W - 104, y: T + 4, width: 98, height: 20, rx: 10, fill: "rgba(245,180,60,.12)", stroke: "rgba(245,180,60,.4)" }, chip);
-    text(chip, "慢 2.5×", { x: W - 55, y: T + 18, "text-anchor": "middle", fill: "#f5b43c", "font-size": 11 });
+    var g = el("g", { "class": "grid" }, svg);
+    [0, 0.5, 1.0, 1.5, 2.0].forEach(function (tv) {
+      el("line", { x1: x(tv), x2: x(tv), y1: T + 6, y2: axisY }, g);
+      text(svg, tv.toFixed(1), { x: x(tv), y: axisY + 16, "text-anchor": "middle" });
+    });
+    el("line", { x1: L, x2: L + iw, y1: axisY, y2: axisY, "class": "axis-line" }, svg);
+    text(svg, "秒", { x: L - 12, y: axisY + 16, "text-anchor": "end" });
   }
 
   /* ================= kpi count-up ================= */
