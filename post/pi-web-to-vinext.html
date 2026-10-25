@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>把 Pi Web 从 Next.js 搬到 vinext：一次构建管线的迁移实录</title>
+<meta name="keywords" content="vinext,Vite,Rolldown,Next.js,构建工具,Bun,Pi Web,前端工程" />
+<meta name="description" content="把一个 Next.js 16 应用搬到 Cloudflare 的 vinext（Vite 8 + Rolldown）上，实测构建速度、产物大小和浏览器首屏的变化。" />
+<style>
+:root {
+  --bg: #0d0b0f;
+  --bg-soft: #14111a;
+  --surface: #17131d;
+  --surface-2: #1d1926;
+  --line: #2b2536;
+  --line-soft: #221e2c;
+  --fg: #f3efe8;
+  --fg-muted: #a79fa8;
+  --fg-faint: #6d6478;
+  --accent: #ffb224;
+  --accent-strong: #ffc85c;
+  --accent-soft: rgba(255, 178, 36, 0.12);
+  --accent-line: rgba(255, 178, 36, 0.35);
+  --before: #6f7d93;
+  --before-soft: rgba(111, 125, 147, 0.16);
+  --after: #ffb224;
+  --flat: #8b93a3;
+  --loss: #ff7a8a;
+  --mono: ui-monospace, "SF Mono", "Martian Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+  --wrap: 54rem;
+  --prose: 44rem;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 16.5px;
+  line-height: 1.85;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+::selection { background: rgba(255, 178, 36, 0.28); color: #fff; }
+a { color: var(--accent-strong); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 4px; }
+
+#write { width: 100%; }
+.wrap { max-width: var(--wrap); margin: 0 auto; padding: 0 24px; }
+.prose { max-width: var(--prose); }
+
+/* ---------- header ---------- */
+.post-head { padding: 72px 0 40px; position: relative; overflow: hidden; }
+.post-head::before {
+  content: ""; position: absolute; inset: -40% 30% auto -10%; height: 420px;
+  background: radial-gradient(closest-side, rgba(255, 178, 36, 0.13), transparent 70%);
+  pointer-events: none;
+}
+.eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--fg-faint);
+}
+.eyebrow:hover { color: var(--fg); text-decoration: none; }
+.eyebrow svg { width: 12px; height: 12px; transition: transform 0.2s ease; }
+.eyebrow:hover svg { transform: translateX(-3px); }
+h1.display {
+  margin: 22px 0 0;
+  font-size: clamp(2.05rem, 5.4vw, 3.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  font-weight: 800;
+  max-width: 24ch;
+  text-wrap: balance;
+}
+h1.display em { font-style: normal; color: var(--accent); }
+.standfirst {
+  margin: 22px 0 0; max-width: 46ch;
+  font-size: 1.08rem; color: var(--fg-muted); line-height: 1.75;
+}
+.byline {
+  margin-top: 30px; padding-top: 18px; border-top: 1px solid var(--line-soft);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+  font-size: 13.5px; color: var(--fg-faint);
+}
+.byline .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--fg-faint); }
+.byline time { font-family: var(--mono); }
+
+/* ---------- headings ---------- */
+h2, h3 { position: relative; font-weight: 700; letter-spacing: -0.01em; }
+h2 {
+  margin: 64px 0 18px; font-size: clamp(1.35rem, 2.6vw, 1.7rem); line-height: 1.3;
+  padding-top: 12px;
+}
+h2 .num {
+  font-family: var(--mono); font-size: 0.62em; color: var(--accent);
+  margin-right: 12px; vertical-align: 0.18em; letter-spacing: 0.08em;
+}
+h3 { margin: 40px 0 12px; font-size: 1.08rem; }
+.anchor {
+  position: absolute; left: -1.1em; top: 50%; transform: translateY(-50%);
+  font-family: var(--mono); color: var(--fg-faint); opacity: 0; transition: opacity 0.15s;
+  font-weight: 400; text-decoration: none;
+}
+h2:hover .anchor, h3:hover .anchor, .anchor:focus { opacity: 1; }
+@media (max-width: 720px) { .anchor { display: none; } }
+
+p { margin: 0 0 1.1em; }
+.prose p, .prose ul, .prose ol { max-width: var(--prose); }
+strong { color: #fff; font-weight: 650; }
+code {
+  font-family: var(--mono); font-size: 0.88em;
+  background: var(--surface-2); border: 1px solid var(--line-soft);
+  border-radius: 5px; padding: 0.1em 0.36em; color: var(--accent-strong);
+  word-break: break-word;
+}
+ul, ol { padding-left: 1.35em; margin: 0 0 1.1em; }
+li { margin: 0.3em 0; }
+li::marker { color: var(--fg-faint); }
+
+/* ---------- callout ---------- */
+.callout {
+  position: relative; margin: 26px 0; padding: 18px 22px 18px 24px;
+  background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px;
+  font-size: 0.96rem; line-height: 1.75; color: var(--fg-muted);
+  max-width: var(--prose);
+}
+.callout::before {
+  content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px;
+  background: var(--accent); border-radius: 0 3px 3px 0;
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout .tag {
+  display: block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+}
+.callout.plain::before { background: var(--line); }
+.callout.plain .tag { color: var(--fg-faint); }
+.callout.warn::before { background: var(--loss); }
+.callout.warn .tag { color: var(--loss); }
+
+/* ---------- code ---------- */
+.code { position: relative; margin: 24px 0; max-width: var(--prose); }
+.code .bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; background: #100e15; border: 1px solid var(--line-soft);
+  border-bottom: none; border-radius: 10px 10px 0 0;
+  font-family: var(--mono); font-size: 11.5px; color: var(--fg-faint); letter-spacing: 0.06em;
+}
+.code pre {
+  margin: 0; padding: 16px 18px; overflow-x: auto;
+  background: #100e15; border: 1px solid var(--line-soft); border-radius: 0 0 10px 10px;
+  font-family: var(--mono); font-size: 13px; line-height: 1.7; color: #d9d2e0;
+}
+.code .bar + pre { border-radius: 0 0 10px 10px; }
+.code .copy {
+  appearance: none; border: 1px solid var(--line); background: transparent; color: var(--fg-faint);
+  font-family: var(--mono); font-size: 11px; padding: 3px 9px; border-radius: 6px; cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.code .copy:hover { color: var(--accent); border-color: var(--accent-line); }
+.code .copy.done { color: #7fd88f; border-color: rgba(127, 216, 143, 0.4); }
+.tok-c { color: #6d6478; }
+.tok-s { color: #9ece8a; }
+.tok-k { color: #ff9e64; }
+.tok-n { color: #e0af68; }
+
+/* ---------- table ---------- */
+.table-wrap { margin: 26px 0; overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 12px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+th, td { padding: 11px 16px; text-align: left; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+th {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--fg-faint); background: var(--bg-soft); font-weight: 500; white-space: nowrap;
+}
+tr:last-child td { border-bottom: none; }
+td.num { font-family: var(--mono); white-space: nowrap; }
+tbody tr:hover { background: rgba(255, 255, 255, 0.018); }
+
+/* ---------- kpi ---------- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 28px 0; }
+.kpi {
+  background: var(--surface); border: 1px solid var(--line-soft); border-radius: 12px; padding: 16px 18px;
+}
+.kpi .label { font-size: 12px; color: var(--fg-faint); font-family: var(--mono); letter-spacing: 0.06em; }
+.kpi .value { font-size: 1.55rem; font-weight: 750; letter-spacing: -0.02em; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.kpi .value small { font-size: 0.55em; font-weight: 500; color: var(--fg-muted); margin-left: 2px; }
+.kpi .delta { font-size: 12.5px; margin-top: 4px; font-family: var(--mono); }
+.kpi .delta.win { color: var(--accent); }
+.kpi .delta.flat { color: var(--flat); }
+.kpi .delta.loss { color: var(--loss); }
+
+/* ---------- chart ---------- */
+.chart {
+  margin: 32px 0; background: linear-gradient(180deg, var(--surface), var(--bg-soft));
+  border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px 20px;
+}
+.chart-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; margin-bottom: 4px; }
+.chart-title { font-size: 1.02rem; font-weight: 700; letter-spacing: -0.01em; }
+.chart-sub { font-size: 13px; color: var(--fg-faint); flex: 1 1 100%; }
+.chart-note { font-size: 12.5px; color: var(--fg-faint); margin-top: 16px; line-height: 1.6; }
+.seg { display: inline-flex; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 9px; padding: 3px; gap: 2px; }
+.seg button {
+  appearance: none; border: 0; background: transparent; color: var(--fg-faint);
+  font-family: var(--mono); font-size: 12px; padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  transition: color 0.15s, background 0.15s; white-space: nowrap;
+}
+.seg button:hover { color: var(--fg); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-strong); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.seg-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 18px; }
+
+.bars { display: flex; flex-direction: column; gap: 14px; }
+.bar-row { display: grid; grid-template-columns: minmax(0, 8.5em) 1fr auto; gap: 12px; align-items: center; }
+.bar-label { font-size: 13px; color: var(--fg-muted); line-height: 1.35; }
+.bar-label b { display: block; color: var(--fg); font-weight: 600; font-size: 13.5px; }
+.bar-label span { font-family: var(--mono); font-size: 11px; color: var(--fg-faint); }
+.bar-label.cont { padding-left: 0.85em; border-left: 2px solid var(--line); }
+.bar-label.cont b { display: none; }
+.bar-track { position: relative; height: 26px; background: rgba(255, 255, 255, 0.035); border-radius: 6px; overflow: hidden; }
+.bar-track::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  background-image: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.07) 0 1px, transparent 1px 25%);
+}
+.axis {
+  display: grid; grid-template-columns: minmax(0, 8.5em) 1fr auto; gap: 12px;
+  margin-top: 2px; font-family: var(--mono); font-size: 10.5px; color: var(--fg-faint);
+}
+.axis .mid { display: flex; justify-content: space-between; }
+.axis .mid i { font-style: normal; }
+.bar-fill {
+  position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 6px;
+  transition: width 1.1s cubic-bezier(0.22, 1, 0.36, 1);
+  display: flex; align-items: center;
+}
+.bar-fill.before { background: linear-gradient(90deg, rgba(111, 125, 147, 0.55), rgba(111, 125, 147, 0.85)); }
+.bar-fill.after { background: linear-gradient(90deg, rgba(255, 178, 36, 0.75), rgba(255, 178, 36, 1)); box-shadow: 0 0 24px rgba(255, 178, 36, 0.25); }
+.bar-fill::after {
+  content: ""; position: absolute; right: 0; top: 0; bottom: 0; width: 2px;
+  background: rgba(255, 255, 255, 0.55);
+}
+.bar-value { font-family: var(--mono); font-size: 13.5px; font-variant-numeric: tabular-nums; min-width: 5.5em; text-align: right; }
+.bar-value .unit { color: var(--fg-faint); font-size: 11px; margin-left: 1px; }
+.badge {
+  display: inline-block; font-family: var(--mono); font-size: 11.5px; padding: 2px 8px;
+  border-radius: 999px; margin-left: 8px; vertical-align: 1px; white-space: nowrap;
+}
+.badge.win { color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent-line); }
+.badge.flat { color: var(--flat); background: rgba(139, 147, 163, 0.12); box-shadow: inset 0 0 0 1px rgba(139, 147, 163, 0.3); }
+.badge.loss { color: var(--loss); background: rgba(255, 122, 138, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 122, 138, 0.3); }
+
+/* race */
+.race { margin-top: 6px; }
+.race-lane { margin-bottom: 16px; }
+.race-lane .who { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; margin-bottom: 6px; }
+.race-lane .who b { font-weight: 600; }
+.race-lane .who .t { font-family: var(--mono); font-size: 12.5px; color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+.race-track { position: relative; height: 34px; background: rgba(255, 255, 255, 0.035); border-radius: 8px; overflow: hidden; }
+.race-fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 8px; }
+.race-fill.before { background: linear-gradient(90deg, rgba(111, 125, 147, 0.5), rgba(111, 125, 147, 0.9)); }
+.race-fill.after { background: linear-gradient(90deg, rgba(255, 178, 36, 0.7), rgba(255, 178, 36, 1)); }
+.race-fill .pct { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-family: var(--mono); font-size: 12px; color: rgba(255, 255, 255, 0.85); }
+.race-controls { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
+.play {
+  appearance: none; cursor: pointer; border: 1px solid var(--accent-line); background: var(--accent-soft);
+  color: var(--accent-strong); font-family: var(--mono); font-size: 12.5px; padding: 7px 16px; border-radius: 8px;
+  display: inline-flex; align-items: center; gap: 8px; transition: background 0.15s, transform 0.1s;
+}
+.play:hover { background: rgba(255, 178, 36, 0.2); }
+.play:active { transform: translateY(1px); }
+.play[disabled] { opacity: 0.45; cursor: default; }
+.clock { font-family: var(--mono); font-size: 13px; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.race-verdict { font-size: 13.5px; color: var(--fg-muted); }
+.race-verdict b { color: var(--accent-strong); font-family: var(--mono); }
+
+/* legend */
+.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12.5px; color: var(--fg-faint); margin: 4px 0 16px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; vertical-align: -1px; }
+
+/* tooltip */
+.tip {
+  position: fixed; z-index: 50; pointer-events: none; opacity: 0; transform: translateY(4px);
+  transition: opacity 0.12s, transform 0.12s;
+  background: #0a0810; border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px;
+  font-family: var(--mono); font-size: 12px; color: var(--fg); white-space: nowrap;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+}
+.tip.on { opacity: 1; transform: translateY(0); }
+.tip .k { color: var(--fg-faint); }
+
+/* reveal */
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
+.reveal.in { opacity: 1; transform: none; }
+
+/* misc */
+.rule { border: 0; border-top: 1px solid var(--line-soft); margin: 56px 0 0; }
+.end { text-align: center; margin: 40px 0 80px; }
+.end a { font-size: 1.4rem; color: var(--fg-faint); }
+.end a:hover { color: var(--accent); text-decoration: none; }
+.footnote { font-size: 13px; color: var(--fg-faint); line-height: 1.7; }
+.arrow-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-family: var(--mono); font-size: 13px; margin: 20px 0; }
+.arrow-flow .step { background: var(--surface); border: 1px solid var(--line-soft); border-radius: 8px; padding: 6px 12px; color: var(--fg-muted); }
+.arrow-flow .step.hot { border-color: var(--accent-line); color: var(--accent-strong); background: var(--accent-soft); }
+.arrow-flow .sep { color: var(--fg-faint); }
+@media (max-width: 600px) {
+  body { font-size: 16px; }
+  .bar-row { grid-template-columns: minmax(0, 6.5em) 1fr; }
+  .bar-value { grid-column: 2; text-align: left; margin-top: 2px; }
+  .axis { grid-template-columns: minmax(0, 6.5em) 1fr; }
+  .axis > span:last-child { display: none; }
+  .chart { padding: 18px 16px 16px; }
+  .post-head { padding-top: 48px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+  .bar-fill, .race-fill { transition: none; }
+}
+</style>
+</head>
+<body>
+<div id='write'>
+
+<header class="post-head">
+  <div class="wrap">
+    <a class="eyebrow" href="../">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true"><path d="M20 12H5"></path><path d="M11 6l-6 6 6 6"></path></svg>
+      博客
+    </a>
+    <h1 class="display">把 Pi Web 从 Next.js 搬到 <em>vinext</em>：一次构建管线的迁移实录</h1>
+    <p class="standfirst">构建从 28 秒降到 4.8 秒，仓库里不再躺着 695 MB 的缓存目录。但浏览器下载的字节数，一秒都没少——这篇把两边都测给你看。</p>
+    <div class="byline">
+      <span>1=0</span><span class="dot"></span>
+      <time datetime="2026-10-25">2026-10-25</time><span class="dot"></span>
+      <span>前端工程 · 构建工具</span><span class="dot"></span>
+      <span>约 18 分钟</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="prose">
+
+<p>先说结论，因为图表更有意思：这次搬迁赢的是<strong>开发和发布的流程</strong>，不是用户的网速。构建时间快了将近 6 倍，发布物体积小了四成，磁盘上那个 695 MB 的缓存目录彻底消失；而打开页面时浏览器真正下载的东西，迁移前后是同一个数量级——我用 WebKit 实测过，差距在 1% 以内。</p>
+
+<p>这篇文章记录我把自己的一个项目从 Next.js 16 搬到 <a href="https://github.com/cloudflare/vinext">vinext</a> 的完整过程：为什么要搬、vinext 是什么、中间踩了哪些坑、以及最后那一堆实测数字。所有数字都是在这台机器上现测的，不是从 release note 里抄的。</p>
+
+<h2 id="why"><span class="num">01</span>缘起：一次 28 秒的构建<a href="#why" class="anchor" aria-label="Permalink">#</a></h2>
+
+<p><a href="https://github.com/brynne8/pi-web-bun">Pi Web</a> 是我维护的一个开源项目：<a href="https://github.com/earendil-works/pi">pi 编程智能体</a>的本地 Web 界面。它和 pi 共用同一套配置和会话文件（就在 <code>~/.pi/agent</code> 里），所以在浏览器里你可以浏览和继续之前的对话、运行 agent 回合、配置模型和 MCP 服务器、顺便看看项目里的文件和 Git 改动。服务端跑在本机，界面是个 React 单页应用。</p>
+
+<p>它原本是个标准的 Next.js 16 应用，而我这边是一条 Bun 优先的分支。问题出在每次发布前的那一次构建上：</p>
+
+<div class="code">
+  <div class="bar"><span>终端</span><button class="copy" type="button">复制</button></div>
+  <pre><code><span class="tok-c"># 迁移前，Bun 下构建 Next.js 16</span>
+$ <span class="tok-k">time</span> bun run build
+real    27.97s
+$ du -sh .next
+727M    .next        <span class="tok-c"># 其中 695M 是 webpack 的 cache</span></code></pre>
+</div>
+
+<p>28 秒听起来还能忍，但它是<strong>每次改一行代码都要付的钱</strong>，而且那 695 MB 的缓存目录会一直躺在仓库里，CI 上每次都是全新的 checkout，等于每次都按冷构建的价格结算。更别说 Next 16 在我们这个项目上还只能用 webpack（ Turbopack 在我们依赖的某个原生模块上有问题），这玩意儿在 Next 16 里已经是「 legacy 但还能用」的状态。</p>
+
+<p>所以当我知道 Cloudflare 做了 vinext 之后，就决定试试。</p>
+
+<h2 id="vinext"><span class="num">02</span>vinext 是什么<a href="#vinext" class="anchor" aria-label="Permalink">#</a></h2>
+
+<p><a href="https://github.com/cloudflare/vinext">vinext</a> 是 Cloudflare 开源的的一个项目，目标一句话能说完：<strong>让 Next.js 的 App Router 代码跑在 Vite 上</strong>。</p>
+
+<p>它不是又一个元框架，也不是让你重写页面。你的 <code>app/</code> 目录、路由约定、<code>route.ts</code> 里的 <code>GET</code>/<code>POST</code> 导出、<code>next/link</code>、Server Component——全都保持原样。变的是底下的引擎：</p>
+
+<div class="arrow-flow">
+  <span class="step">next dev</span><span class="sep">→</span>
+  <span class="step hot">vinext dev</span><span class="sep">·</span>
+  <span class="step">next build</span><span class="sep">→</span>
+  <span class="step hot">vinext build</span><span class="sep">·</span>
+  <span class="step">next start</span><span class="sep">→</span>
+  <span class="step hot">vinext start</span>
+</div>
+
+<p>配置上，它把 Next 的配置接过来改名：<code>next.config.ts</code> 变成 <code>next-config.ts</code>（导出还是一个 <code>NextConfig</code> 对象，类型直接从 vinext 里 import），再在 <code>vite.config.ts</code> 里作为插件引入。我这边改完是这样的：</p>
+
+<div class="code">
+  <div class="bar"><span>vite.config.ts</span><button class="copy" type="button">复制</button></div>
+  <pre><code><span class="tok-k">import</span> { defineConfig } <span class="tok-k">from</span> <span class="tok-s">"vite"</span>;
+<span class="tok-k">import</span> vinext <span class="tok-k">from</span> <span class="tok-s">"vinext"</span>;
+<span class="tok-k">import</span> { nextConfig } <span class="tok-k">from</span> <span class="tok-s">"./next-config.ts"</span>;
+
+<span class="tok-k">export default</span> defineConfig({
+  plugins: [vinext({ nextConfig })],
+  <span class="tok-c">// 我们项目自己的两个补丁，下面会讲</span>
+  build: { target: <span class="tok-s">"safari16.2"</span> },
+});</code></pre>
+</div>
+
+<p>底层是 <strong>Vite 8 + Rolldown</strong>。Rolldown 是 Rolldown 团队用 Rust 写的打包器，接口对齐 Rollup，目标是替代 webpack/esbuild 那一层——所以「快到不正常」这件事是有来处的，不是魔法。另外它还自带一个兼容性检查命令 <code>vinext check</code>，会扫描你的代码里用到的 Next 特性，告诉你哪些不支持。</p>
+
+<div class="callout">
+  <span class="tag">值得说明</span>
+  <p>vinext 做的是「Next.js 兼容层」，不是「Next.js 的替代品」。它不实现 Next 的全部能力，也不打算让你迁移到 Cloudflare Workers 才能用——本地 <code>vinext start</code> 就是一个普通的 Node/Bun 生产服务器。对我们这种「一个本机 Web UI」的项目，正合适。</p>
+</div>
+
+<h2 id="how"><span class="num">03</span>迁移过程：代码几乎没动，坑都在边上<a href="#how" class="anchor" aria-label="Permalink">#</a></h2>
+
+<p>业务代码的改动小得出乎意料。API 路由里的 <code>NextRequest</code>、<code>NextResponse</code> 改成从 <code>vinext/shims/server</code> 导入，一共 62 处，机械替换；<code>proxy.ts</code>、PWA 的 <code>sw.js</code>、静态资源都没动。真正花时间的是下面这三件事，它们全都不是 vinext 的问题，但都会在迁移后第一次暴露出来。</p>
+
+<h3>坑一：dev 下所有写请求都变成了 GET</h3>
+
+<p>迁完之后我第一次在 dev 里发消息，前端所有的 <code>POST</code> 都变成了 <code>GET</code>，界面直接瘫掉。我一开始怀疑 vinext，写了最小复现：一个非原生的 Request-like 对象加上 init 传给 <code>new Request()</code>，Bun 会把 method 丢掉。</p>
+
+<div class="callout warn">
+  <span class="tag">根因不在 vinext</span>
+  <p>这是 Bun 的 bug（<a href="https://github.com/oven-sh/bun/issues/42759">oven-sh/bun#42759</a>）：<code>new Request(input, init)</code> 在 init 没有 <code>method</code> 时，没有回落到 input 上的 <code>method</code>。vinext 的 Node 适配器正是这么构造请求的，Node 的 undici 会抛错从而走重建逻辑，Bun 不会，于是静默降级成 GET。修复在 Bun 的 PR #41994 里，被 Jarred Sumner 的 HTTP 整合大 PR #46528 吸收。我装了那个 PR 的 CI 构建，问题消失。</p>
+</div>
+
+<p>这个坑的教训是：<strong>换构建工具的时候，会把运行时里一直存在但没被触发的 bug 激活</strong>。Next 的 dev server 自己不这么构造请求，所以这个 bug 在我们的代码里躺了很久都没人发现。</p>
+
+<h3>坑二：一个文件锁让整个侧栏状态写入 500</h3>
+
+<p>第二个坑更朴实。侧栏的置顶、归档、项目排序要写一个 JSON 状态文件，用了 <code>proper-lockfile</code> 加文件锁。迁移后所有写入都返回 500，错误信息是 <code>options.fs.mkdir is not a function</code>。</p>
+
+<p>原因是 Vite 的模块运行器会给 dev server 的环境注入自己的一份 <code>fs</code> 对象——它没有 <code>mkdir</code>。而 <code>proper-lockfile</code> 是 CJS，它 <code>require("graceful-fs")</code> 时拿到的是被加工过的那份。修法是把这类包声明成 <code>serverExternalPackages</code>，让 Node 原生加载它们：</p>
+
+<div class="code">
+  <div class="bar"><span>next-config.ts</span><button class="copy" type="button">复制</button></div>
+  <pre><code>serverExternalPackages: [
+  <span class="tok-s">"node-pty"</span>, <span class="tok-s">"undici"</span>, <span class="tok-s">"web-push"</span>,
+  <span class="tok-c">// proper-lockfile 是 CJS，会对自己 require 到的 fs 调 mkdir；</span>
+  <span class="tok-c">// Vite 模块运行器注入的 fs 没有这个方法，于是每次写入都 500。</span>
+  <span class="tok-s">"proper-lockfile"</span>, <span class="tok-s">"graceful-fs"</span>,
+],</code></pre>
+</div>
+
+<h3>坑三：一个动态 import 让 WebKit 报错</h3>
+
+<p>第三个坑是浏览器测试跑出来的。有一处 <code>await import("@/lib/tool-presets")</code>，生产构建下它会被拆出一个独立的 chunk；页面在它还没下载完的时候发生了导航，WebKit 直接把这次 import 判失败，报 <code>Importing a module script failed</code>。改成静态导入就好——那个模块本来就没有循环依赖的问题，动态 import 只是个多余的习惯。</p>
+
+<div class="callout plain">
+  <span class="tag">方法论</span>
+  <p>这三个坑有一个共同点：<strong>只有把浏览器端到端测试跑起来才会发现</strong>。我这次是先把 <code>bun test</code>、<code>tsc</code>、<code>eslint</code>、<code>vite build</code> 全跑绿，然后用 Playwright 的 WebKit 把 43 项检查在 dev 和 <code>vinext start</code> 两种模式下各跑一遍，第二个和第三个坑才浮出来。</p>
+</div>
+
+<h2 id="bench"><span class="num">04</span>实测对比<a href="#bench" class="anchor" aria-label="Permalink">#</a></h2>
+
+<p>以下所有数字都在同一台机器（Apple Silicon macOS）上现测，用 <code>/usr/bin/time -p</code> 计时间。构建分「冷」（先删掉产物目录）和「热」（紧接着再构建一次）两种；运行时分 Bun 和 Node，因为发布走的是 Node。</p>
+
+<h3>构建时间</h3>
+
+<div class="chart reveal" id="chart-build">
+  <div class="chart-head">
+    <span class="chart-title">构建时间</span>
+    <span class="chart-sub">越短越好 · 单位秒 · 悬停查看精确值</span>
+  </div>
+  <div class="seg-row">
+    <div class="seg" role="group" aria-label="运行时">
+      <button type="button" data-runtime="bun" aria-pressed="true">Bun 1.4.4</button>
+      <button type="button" data-runtime="node" aria-pressed="false">Node 26.7</button>
+    </div>
+    <div class="seg" role="group" aria-label="构建类型">
+      <button type="button" data-kind="cold" aria-pressed="true">冷构建</button>
+      <button type="button" data-kind="warm" aria-pressed="false">热构建</button>
+    </div>
+  </div>
+  <div class="bars" id="build-bars"></div>
+  <p class="chart-note">Next.js 16 使用 webpack 构建（本项目下 Turbopack 有兼容问题）。热构建的 Next 数字依赖 <code>.next/cache</code> 里约 695 MB 的持久化缓存；Vite 不留构建缓存，所以它的冷热两次几乎一样。</p>
+</div>
+
+<p>把这张表读出来就是：<strong>Bun 下冷构建 27.97 秒 → 4.81 秒，快 5.8 倍；热构建 12.35 秒 → 4.05 秒，快 3.0 倍。</strong>换成 Node 也是同一个量级（5.2 倍 / 3.5 倍）。</p>
+
+<p>如果想直观看一下差距，下面这个按钮会按真实时长比例重放一次「构建竞速」——左边那条跑完的时间里，右边那条已经跑完五轮半：</p>
+
+<div class="chart reveal" id="chart-race">
+  <div class="chart-head">
+    <span class="chart-title">构建竞速</span>
+    <span class="chart-sub">动画时长按真实比例压缩（约 8:1），读数按真实秒数</span>
+  </div>
+  <div class="race">
+    <div class="race-lane">
+      <div class="who"><b>Next.js 16 · webpack</b><span class="t" id="race-t-before">27.97 s</span></div>
+      <div class="race-track"><div class="race-fill before" id="race-before"></div></div>
+    </div>
+    <div class="race-lane">
+      <div class="who"><b>vinext · Vite 8 + Rolldown</b><span class="t" id="race-t-after">4.81 s</span></div>
+      <div class="race-track"><div class="race-fill after" id="race-after"></div></div>
+    </div>
+  </div>
+  <div class="race-controls">
+    <button class="play" type="button" id="race-play">
+      <svg width="11" height="12" viewBox="0 0 11 12" fill="currentColor" aria-hidden="true"><path d="M0 0l11 6-11 6z"></path></svg>
+      播放
+    </button>
+    <span class="clock" id="race-clock">0.00 s</span>
+    <span class="race-verdict" id="race-verdict">Bun · 冷构建</span>
+  </div>
+</div>
+
+<h3>磁盘上的产物</h3>
+
+<p>这是我最喜欢的一张图，因为它同时说明了两件事：Vite 不留构建缓存，以及 Next 那 695 MB 到底是些什么。下面用的是线性刻度，没有取对数——<strong>那个 19 MB 的条之所以几乎看不见，就是它本来的样子</strong>。</p>
+
+<div class="chart reveal" id="chart-disk">
+  <div class="chart-head">
+    <span class="chart-title">构建产物占用的磁盘空间</span>
+    <span class="chart-sub">线性刻度 · 单位 MB · 悬停查看各段</span>
+  </div>
+  <div class="legend">
+    <span><i style="background:rgba(111,125,147,.85)"></i>webpack 持久化缓存</span>
+    <span><i style="background:rgba(111,125,147,.4)"></i>真实产物（server + static）</span>
+    <span><i style="background:#ffb224"></i>vinext 真实产物（server + client）</span>
+  </div>
+  <div class="bars" id="disk-bars"></div>
+  <p class="chart-note">去掉缓存后，真实产物是 32 MB → 19 MB，小 41%。服务端那部分从 22 MB 降到 10 MB。客户端静态资源两者接近（9.0 MB vs 8.8 MB）。</p>
+</div>
+
+<h3>发布包</h3>
+
+<div class="kpis reveal" id="kpi-pack">
+  <div class="kpi">
+    <div class="label">NPM TARBALL</div>
+    <div class="value">5.86<small>MB</small></div>
+    <div class="delta win">← 6.85 MB · −14%</div>
+  </div>
+  <div class="kpi">
+    <div class="label">解包后体积</div>
+    <div class="value">18.7<small>MB</small></div>
+    <div class="delta win">← 32.2 MB · −42%</div>
+  </div>
+  <div class="kpi">
+    <div class="label">文件数</div>
+    <div class="value">691</div>
+    <div class="delta win">← 775 · −11%</div>
+  </div>
+  <div class="kpi">
+    <div class="label">客户端 JS 分片</div>
+    <div class="value">108</div>
+    <div class="delta win">← 164 · −34%</div>
+  </div>
+</div>
+
+<h3>浏览器第一次打开，下载了多少</h3>
+
+<p>现在到了泼冷水的部分。我用 Playwright 的 WebKit 打开生产服务器的首页，把同源请求全部累加，结果是：</p>
+
+<div class="chart reveal" id="chart-load">
+  <div class="chart-head">
+    <span class="chart-title">首屏下载量（同源，WebKit 实测）</span>
+    <span class="chart-sub">单位 KiB · 越低越好</span>
+  </div>
+  <div class="legend">
+    <span><i style="background:rgba(111,125,147,.85)"></i>传输前大小（raw）</span>
+    <span><i style="background:rgba(111,125,147,.35)"></i>gzip 后</span>
+  </div>
+  <div class="bars" id="load-bars"></div>
+  <p class="chart-note">两次测量各跑三遍，数字稳定。请求数 29 → 25，因为 Vite 把 chunk 合并得更少更大（一个 2.7 MB 的主分片，对比 Next 的 1.1 + 1.0 + 0.3 + 0.3…）；但总字节数没变。</p>
+</div>
+
+<div class="callout plain">
+  <span class="tag">为什么没变小</span>
+  <p>因为首屏下载的是<strong>同一份代码</strong>：React、整个应用、依赖库。换打包器改变的是这些代码怎么被切分、怎么被压缩传输，不改变它们有多少。真正能让这个数字下降的是拆包、按需加载和删依赖——那是另一篇文章的事。</p>
+</div>
+
+<h3>还有一项是变慢的</h3>
+
+<p>为了不把这篇写成软文，这一项也得放上来：生产服务器就绪的时间，Next 是 0.50 秒，vinext 是 1.27 秒，<strong>慢了 2.5 倍</strong>。日常是常驻进程，影响有限；但如果你在 CI 里频繁起停服务，或者拿它做 serverless，这一项要算进成本。</p>
+
+<div class="chart reveal" id="chart-start">
+  <div class="chart-head">
+    <span class="chart-title">生产服务器就绪时间</span>
+    <span class="chart-sub">从启动到首页返回 200 · 单位秒 · 越低越好</span>
+  </div>
+  <div class="bars" id="start-bars"></div>
+</div>
+
+<h2 id="table"><span class="num">05</span>一张对照表<a href="#table" class="anchor" aria-label="Permalink">#</a></h2>
+
+<div class="table-wrap">
+<table>
+  <thead><tr><th>项目</th><th>迁移前（Next.js 16）</th><th>迁移后（vinext）</th></tr></thead>
+  <tbody>
+    <tr><td>构建命令</td><td class="num">next build --webpack</td><td class="num">vite build</td></tr>
+    <tr><td>开发命令</td><td class="num">next dev</td><td class="num">vite dev</td></tr>
+    <tr><td>生产服务</td><td class="num">next start</td><td class="num">vinext start</td></tr>
+    <tr><td>构建耗时（Bun / 冷）</td><td class="num">27.97 s</td><td class="num">4.81 s</td></tr>
+    <tr><td>构建耗时（Bun / 热）</td><td class="num">12.35 s</td><td class="num">4.05 s</td></tr>
+    <tr><td>产物目录</td><td class="num">.next/（727 MB，含 695 MB 缓存）</td><td class="num">dist/（19 MB）</td></tr>
+    <tr><td>开发状态目录</td><td class="num">.next-dev/</td><td class="num">.vinext/</td></tr>
+    <tr><td>配置文件</td><td class="num">next.config.ts</td><td class="num">next-config.ts + vite.config.ts</td></tr>
+    <tr><td>发布包（tarball）</td><td class="num">6.85 MB</td><td class="num">5.86 MB</td></tr>
+    <tr><td>首屏下载（raw / gzip）</td><td class="num">3722 / 1087 KiB</td><td class="num">3767 / 1100 KiB</td></tr>
+    <tr><td>生产服务器就绪</td><td class="num">0.50 s</td><td class="num">1.27 s</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="method"><span class="num">06</span>测量方法<a href="#method" class="anchor" aria-label="Permalink">#</a></h2>
+
+<p>免得这些数字不可复现，把方法写清楚。全部在同一台 Apple Silicon Mac 上完成，两次构建之间没有其他负载：</p>
+
+<div class="code">
+  <div class="bar"><span>测量脚本</span><button class="copy" type="button">复制</button></div>
+  <pre><code><span class="tok-c"># 构建时间：冷 = 先删产物目录，热 = 紧接着再来一次</span>
+rm -rf dist .next
+/usr/bin/time -p bun run build      <span class="tok-c"># 或 npm run build（Node）</span>
+
+<span class="tok-c"># 磁盘与发布包</span>
+du -sh .next dist
+npm pack --dry-run --json           <span class="tok-c"># size / unpackedSize / 文件数</span>
+
+<span class="tok-c"># 首屏下载量：Playwright WebKit，累加同源 response body</span>
+page.on(<span class="tok-s">"response"</span>, <span class="tok-k">async</span> (r) =&gt; {
+  <span class="tok-k">if</span> (<span class="tok-k">new</span> URL(r.url()).origin !== origin) <span class="tok-k">return</span>;
+  bytes += (await r.body()).length;
+});</code></pre>
+</div>
+
+<p>运行时的版本：Bun <code>1.4.4-canary.1</code>（带上面提到的 Request 修复），Node <code>26.7.0</code>。每一项测量至少跑两遍，文章中写的是稳定值；Vite 的构建时间波动在 ±10% 以内，Next 的冷构建波动更小（它的耗时主要由 CPU 决定）。</p>
+
+<h2 id="verdict"><span class="num">07</span>所以，值得迁吗<a href="#verdict" class="anchor" aria-label="Permalink">#</a></h2>
+
+<p>如果你和我一样，是一个人在维护一个本机/小规模部署的 Next.js 应用，迁移动力主要来自开发体验：<strong>每次构建从半分钟变成五秒，这个差别会改变你提交代码的节奏</strong>。加上产物目录从 727 MB 变成 19 MB，clone 和 CI 都轻了一截。</p>
+
+<p>但如果你的瓶颈是首屏性能、是 SEO、是边缘部署，那这次搬迁不会直接帮你——首屏字节数没变，服务器启动还变慢了。这些地方该做的优化（拆包、缓存策略、流式渲染）迁移前后一样要做。</p>
+
+<p>至于风险：vinext 是个年轻的项目，兼容性是「覆盖主流用法」而不是「全部」。动手之前先跑一遍 <code>vinext check</code>，再确认你的测试套件能跑起来——我这次三个坑全是测试跑起来之后才发现的。对一个功能已经稳定的项目来说，先在有测试护航的分支上试一次，成本是一天。</p>
+
+<p>项目在这边：<a href="https://github.com/brynne8/pi-web-bun">pi-web-bun</a>（迁移在 <code>try/vinext</code> 分支），vinext 在 <a href="https://github.com/cloudflare/vinext">cloudflare/vinext</a>。Bun 那个 bug 的修复进展在 <a href="https://github.com/oven-sh/bun/pull/46528">oven-sh/bun#46528</a>。</p>
+
+<hr class="rule">
+<p class="footnote">文中所有数据由作者于 2026-10-25 在 Apple Silicon macOS 上实测。图表为纯手写 SVG/CSS 实现，无第三方图表库。</p>
+
+<p class="end"><a href='../' title='返回首页'>∎</a></p>
+
+</div>
+</div>
+
+<div class="tip" id="tip" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- data ---------- */
+  var BUILD = {
+    bun:  { cold: { next: 27.97, vinext: 4.81 }, warm: { next: 12.35, vinext: 4.05 } },
+    node: { cold: { next: 31.33, vinext: 6.00 }, warm: { next: 17.81, vinext: 5.16 } }
+  };
+  var SPEEDUP = {
+    bun:  { cold: 5.8, warm: 3.0 },
+    node: { cold: 5.2, warm: 3.5 }
+  };
+  var DISK = {
+    next: { cache: 695, real: 32 },
+    vinext: 19
+  };
+  var LOAD = {
+    next:  { raw: 3722, gzip: 1087, files: 29 },
+    vinext: { raw: 3767, gzip: 1100, files: 25 }
+  };
+  var START = { next: 0.50, vinext: 1.27 };
+
+  function fmt(v, digits) {
+    return v.toFixed(digits === undefined ? 2 : digits);
+  }
+
+  /* ---------- tooltip ---------- */
+  var tip = document.getElementById("tip");
+  function showTip(html, x, y) {
+    tip.innerHTML = html;
+    tip.classList.add("on");
+    var r = tip.getBoundingClientRect();
+    var left = Math.min(Math.max(8, x - r.width / 2), window.innerWidth - r.width - 8);
+    tip.style.left = left + "px";
+    tip.style.top = (y - r.height - 12) + "px";
+  }
+  function hideTip() { tip.classList.remove("on"); }
+  function bindTip(el, html) {
+    el.addEventListener("mouseenter", function (e) { showTip(html, e.clientX, e.clientY); });
+    el.addEventListener("mousemove", function (e) { showTip(html, e.clientX, e.clientY); });
+    el.addEventListener("mouseleave", hideTip);
+  }
+
+  /* ---------- generic bar chart ---------- */
+  // rows: [{ name, sub, value, unit, cls, tip }]
+  function renderBars(host, rows, opts) {
+    opts = opts || {};
+    var max = opts.max;
+    if (max === undefined) max = Math.max.apply(null, rows.map(function (r) { return r.value; }));
+    host.innerHTML = "";
+    rows.forEach(function (row) {
+      var el = document.createElement("div");
+      el.className = "bar-row";
+      var pct = Math.max(row.value / max * 100, 0.6);
+      el.innerHTML =
+        '<div class="bar-label' + (row.cont ? " cont" : "") + '"><b>' + row.name + '</b>' + (row.sub ? '<span>' + row.sub + '</span>' : '') + '</div>' +
+        '<div class="bar-track"><div class="bar-fill ' + row.cls + '" data-pct="' + pct + '"></div></div>' +
+        '<div class="bar-value" data-value="' + row.value + '">0<span class="unit">' + (row.unit || '') + '</span></div>';
+      var fill = el.querySelector(".bar-fill");
+      var valueEl = el.querySelector(".bar-value");
+      if (row.tip) {
+        bindTip(el, row.tip);
+        el.style.cursor = "default";
+      }
+      el._fill = fill;
+      el._valueEl = valueEl;
+      el._value = row.value;
+      el._digits = opts.digits === undefined ? 2 : opts.digits;
+      host.appendChild(el);
+    });
+    if (opts.axis !== false) {
+      var axis = document.createElement("div");
+      axis.className = "axis";
+      axis.innerHTML =
+        '<span></span>' +
+        '<span class="mid"><i>0</i><i>' + (opts.axisMid === undefined ? Math.round(max / 2) : opts.axisMid) + (opts.axisUnit || "") + '</i><i>' + Math.round(max) + (opts.axisUnit || "") + '</i></span>' +
+        '<span></span>';
+      host.appendChild(axis);
+    }
+    return Array.prototype.slice.call(host.children).filter(function (el) {
+      return el.classList.contains("bar-row");
+    });
+  }
+
+  function playBars(rows) {
+    rows.forEach(function (el, i) {
+      var fill = el._fill, valueEl = el._valueEl, target = el._value, digits = el._digits;
+      var delay = reduced ? 0 : i * 90;
+      setTimeout(function () {
+        fill.style.width = fill.getAttribute("data-pct") + "%";
+        if (reduced) { valueEl.innerHTML = fmt(target, digits) + '<span class="unit">' + (valueEl.querySelector(".unit") ? valueEl.querySelector(".unit").textContent : "") + '</span>'; return; }
+        var t0 = performance.now(), dur = 900;
+        (function tick(now) {
+          var p = Math.min((now - t0) / dur, 1);
+          var eased = 1 - Math.pow(1 - p, 3);
+          valueEl.firstChild.nodeValue = fmt(target * eased, digits);
+          if (p < 1) requestAnimationFrame(tick);
+        })(t0);
+      }, delay);
+    });
+  }
+
+  function unitOf(el) {
+    var u = el.querySelector(".unit");
+    return u ? u.textContent : "";
+  }
+
+  /* ---------- chart: build time ---------- */
+  var buildState = { runtime: "bun", kind: "cold" };
+  var buildRows = [];
+  function drawBuild() {
+    var d = BUILD[buildState.runtime][buildState.kind];
+    var max = Math.max(d.next, d.vinext);
+    buildRows = renderBars(document.getElementById("build-bars"), [
+      { name: "Next.js 16", sub: "webpack", value: d.next, cls: "before", unit: " s",
+        tip: "Next.js 16 · webpack · " + buildState.runtime + " · " + (buildState.kind === "cold" ? "冷构建" : "热构建") + "<br><span class='k'>" + fmt(d.next) + " s</span>" },
+      { name: "vinext", sub: "Vite 8 + Rolldown", value: d.vinext, cls: "after", unit: " s",
+        tip: "vinext · Vite 8 + Rolldown · " + buildState.runtime + " · " + (buildState.kind === "cold" ? "冷构建" : "热构建") + "<br><span class='k'>" + fmt(d.vinext) + " s</span>" }
+    ], { max: max, digits: 2, axisUnit: " s" });
+    var badge = SPEEDUP[buildState.runtime][buildState.kind];
+    var last = buildRows[buildRows.length - 1];
+    var val = last.querySelector(".bar-value");
+    val.insertAdjacentHTML("beforeend", '<span class="badge win">快 ' + badge + '×</span>');
+    playBars(buildRows);
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("#chart-build .seg button"), function (btn) {
+    btn.addEventListener("click", function () {
+      var group = btn.parentNode;
+      Array.prototype.forEach.call(group.querySelectorAll("button"), function (b) {
+        b.setAttribute("aria-pressed", String(b === btn));
+      });
+      if (btn.dataset.runtime) buildState.runtime = btn.dataset.runtime;
+      if (btn.dataset.kind) buildState.kind = btn.dataset.kind;
+      drawBuild();
+    });
+  });
+
+  /* ---------- chart: race ---------- */
+  var raceBefore = document.getElementById("race-before");
+  var raceAfter = document.getElementById("race-after");
+  var raceClock = document.getElementById("race-clock");
+  var racePlay = document.getElementById("race-play");
+  var raceVerdict = document.getElementById("race-verdict");
+  var racing = false;
+  // 压缩比：Next 冷构建 27.97 s 用 8 s 动画演完
+  var RACE_SCALE = 8 / 27.97;
+  function resetRace() {
+    raceBefore.style.width = "0%";
+    raceAfter.style.width = "0%";
+    raceClock.textContent = "0.00 s";
+  }
+  function runRace() {
+    if (racing) return;
+    racing = true;
+    racePlay.disabled = true;
+    resetRace();
+    var nextT = BUILD.bun.cold.next, vinextT = BUILD.bun.cold.vinext;
+    var dur = nextT * RACE_SCALE;
+    var t0 = performance.now();
+    raceVerdict.innerHTML = "Bun · 冷构建 · <b>" + fmt(nextT) + " s</b> vs <b>" + fmt(vinextT) + " s</b>";
+    (function tick(now) {
+      var el = (now - t0) / 1000;
+      var p = Math.min(el / dur, 1);
+      raceBefore.style.width = (p * 100) + "%";
+      var pv = Math.min(el / (vinextT * RACE_SCALE), 1);
+      raceAfter.style.width = (pv * 100) + "%";
+      raceClock.textContent = (el * (reduced ? 1 : 1)).toFixed(2) + " s";
+      if (p < 1) requestAnimationFrame(tick);
+      else {
+        racing = false;
+        racePlay.disabled = false;
+        raceClock.textContent = "完成：" + fmt(nextT) + " s vs " + fmt(vinextT) + " s";
+      }
+    })(t0);
+  }
+  racePlay.addEventListener("click", runRace);
+
+  /* ---------- chart: disk ---------- */
+  var diskRows = [];
+  function drawDisk() {
+    var max = DISK.next.cache + DISK.next.real;
+    diskRows = renderBars(document.getElementById("disk-bars"), [
+      { name: ".next", sub: "Next.js 16", value: DISK.next.cache + DISK.next.real, cls: "before", unit: " MB",
+        tip: ".next 合计 " + (DISK.next.cache + DISK.next.real) + " MB<br><span class='k'>webpack 缓存 " + DISK.next.cache + " MB · 真实产物 " + DISK.next.real + " MB</span>" },
+      { name: "dist", sub: "vinext", value: DISK.vinext, cls: "after", unit: " MB",
+        tip: "dist 合计 " + DISK.vinext + " MB<br><span class='k'>无构建缓存 · server 10 MB + client 8.8 MB</span>" }
+    ], { max: max, digits: 0, axisUnit: " MB", axisMid: 350 });
+    // 堆叠：把 .next 那条拆成缓存 + 真实产物两段
+    var first = diskRows[0];
+    var fill = first._fill;
+    fill.style.background = "none";
+    fill.innerHTML =
+      '<span style="position:absolute;left:0;top:0;bottom:0;width:' + (DISK.next.cache / max * 100) + '%;background:rgba(111,125,147,.85);border-radius:6px 0 0 6px"></span>' +
+      '<span style="position:absolute;left:' + (DISK.next.cache / max * 100) + '%;top:0;bottom:0;width:' + (DISK.next.real / max * 100) + '%;background:rgba(111,125,147,.4);border-radius:0 6px 6px 0"></span>';
+    var val = first.querySelector(".bar-value");
+    val.insertAdjacentHTML("beforeend", '<span class="badge flat">缓存占 96%</span>');
+    var last = diskRows[1];
+    last.querySelector(".bar-value").insertAdjacentHTML("beforeend", '<span class="badge win">−97%</span>');
+    playBars(diskRows);
+  }
+
+  /* ---------- chart: first load ---------- */
+  var loadRows = [];
+  function drawLoad() {
+    loadRows = renderBars(document.getElementById("load-bars"), [
+      { name: "Next.js 16", sub: "raw · 29 个请求", value: LOAD.next.raw, cls: "before", unit: " KiB",
+        tip: "Next.js 16 首屏<br><span class='k'>raw 3722 KiB · gzip 1087 KiB · 29 个请求</span>" },
+      { name: "", sub: "gzip 后", cont: true, value: LOAD.next.gzip, cls: "before", unit: " KiB",
+        tip: "Next.js 16 首屏 · gzip<br><span class='k'>1087 KiB</span>" },
+      { name: "vinext", sub: "raw · 25 个请求", value: LOAD.vinext.raw, cls: "after", unit: " KiB",
+        tip: "vinext 首屏<br><span class='k'>raw 3767 KiB · gzip 1100 KiB · 25 个请求</span>" },
+      { name: "", sub: "gzip 后", cont: true, value: LOAD.vinext.gzip, cls: "after", unit: " KiB",
+        tip: "vinext 首屏 · gzip<br><span class='k'>1100 KiB</span>" }
+    ], { max: Math.max(LOAD.next.raw, LOAD.vinext.raw), digits: 0, axisUnit: " KiB" });
+    var last = loadRows[loadRows.length - 1];
+    last.querySelector(".bar-value").insertAdjacentHTML("beforeend", '<span class="badge flat">+1.2%</span>');
+    // gzip 两条用半透明，跟图例对应
+    loadRows[1]._fill.style.background = "linear-gradient(90deg, rgba(111,125,147,.25), rgba(111,125,147,.5))";
+    loadRows[3]._fill.style.background = "linear-gradient(90deg, rgba(255,178,36,.3), rgba(255,178,36,.55))";
+    playBars(loadRows);
+  }
+
+  /* ---------- chart: server start ---------- */
+  var startRows = [];
+  function drawStart() {
+    startRows = renderBars(document.getElementById("start-bars"), [
+      { name: "next start", sub: "Next.js 16", value: START.next, cls: "before", unit: " s",
+        tip: "next start<br><span class='k'>0.50 s</span>" },
+      { name: "vinext start", sub: "Vite 8", value: START.vinext, cls: "after", unit: " s",
+        tip: "vinext start<br><span class='k'>1.27 s</span>" }
+    ], { max: START.vinext, digits: 2, axisUnit: " s" });
+    startRows[1].querySelector(".bar-value").insertAdjacentHTML("beforeend", '<span class="badge loss">慢 2.5×</span>');
+    playBars(startRows);
+  }
+
+  /* ---------- scroll reveal ---------- */
+  var charts = [
+    { el: document.getElementById("chart-build"), draw: drawBuild },
+    { el: document.getElementById("chart-race"), draw: function () { resetRace(); } },
+    { el: document.getElementById("chart-disk"), draw: drawDisk },
+    { el: document.getElementById("chart-load"), draw: drawLoad },
+    { el: document.getElementById("chart-start"), draw: drawStart }
+  ];
+  if ("IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var item = charts.filter(function (c) { return c.el === entry.target; })[0];
+        if (!item || item.done) return;
+        item.done = true;
+        entry.target.classList.add("in");
+        item.draw();
+        io.unobserve(entry.target);
+      });
+    }, { threshold: 0.25 });
+    charts.forEach(function (c) { if (c.el) io.observe(c.el); });
+  } else {
+    charts.forEach(function (c) { if (c.el) { c.el.classList.add("in"); c.draw(); } });
+  }
+
+  /* ---------- copy buttons ---------- */
+  Array.prototype.forEach.call(document.querySelectorAll(".code .copy"), function (btn) {
+    btn.addEventListener("click", function () {
+      var pre = btn.closest(".code").querySelector("pre");
+      var text = pre.innerText;
+      var done = function () {
+        btn.textContent = "已复制";
+        btn.classList.add("done");
+        setTimeout(function () { btn.textContent = "复制"; btn.classList.remove("done"); }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+      } else {
+        fallbackCopy(text); done();
+      }
+    });
+  });
+  function fallbackCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (e) { /* noop */ }
+    document.body.removeChild(ta);
+  }
+})();
+</script>
+</body>
+</html>
