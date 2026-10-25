@@ -6,6 +6,7 @@
 <title>把 Pi Web 从 Next.js 搬到 vinext：一次构建管线的迁移实录</title>
 <meta name="keywords" content="vinext,Vite,Rolldown,Next.js,构建工具,Bun,Pi Web,前端工程" />
 <meta name="description" content="把一个 Next.js 16 应用搬到 Cloudflare 的 vinext（Vite 8 + Rolldown）上，实测构建速度、产物大小和浏览器首屏的变化。" />
+<noscript><style>.reveal { opacity: 1 !important; transform: none !important; }</style></noscript>
 <style>
 :root {
   --bg: #0d0b0f;
@@ -875,11 +876,33 @@ page.on(<span class="tok-s">"response"</span>, <span class="tok-k">async</span> 
     playBars(startRows);
   }
 
+  /* ---------- chart: kpi numbers ---------- */
+  function drawKpis() {
+    if (reduced) return;
+    Array.prototype.forEach.call(document.querySelectorAll("#kpi-pack .kpi"), function (kpi, i) {
+      var valueEl = kpi.querySelector(".value");
+      var small = valueEl.querySelector("small");
+      var unit = small ? small.outerHTML : "";
+      var digits = (valueEl.textContent.split(".")[1] || "").replace(/[^\d]/g, "").length;
+      var target = parseFloat(valueEl.textContent.replace(/[^\d.]/g, ""));
+      if (!isFinite(target)) return;
+      valueEl.innerHTML = (0).toFixed(digits) + unit;
+      var t0 = performance.now() + i * 90, dur = 900;
+      (function tick(now) {
+        var p = Math.min(Math.max((now - t0) / dur, 0), 1);
+        var eased = 1 - Math.pow(1 - p, 3);
+        valueEl.innerHTML = (target * eased).toFixed(digits) + unit;
+        if (p < 1) requestAnimationFrame(tick);
+      })(performance.now());
+    });
+  }
+
   /* ---------- scroll reveal ---------- */
   var charts = [
     { el: document.getElementById("chart-build"), draw: drawBuild },
     { el: document.getElementById("chart-race"), draw: function () { resetRace(); } },
     { el: document.getElementById("chart-disk"), draw: drawDisk },
+    { el: document.getElementById("kpi-pack"), draw: drawKpis },
     { el: document.getElementById("chart-load"), draw: drawLoad },
     { el: document.getElementById("chart-start"), draw: drawStart }
   ];
