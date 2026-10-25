@@ -146,6 +146,10 @@ h2:hover .anchor, h3:hover .anchor, .anchor:focus { opacity: 1; }
   font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--fg-faint);
 }
 .code .bar .lang { color: var(--accent); }
+.code pre code {
+  background: none; padding: 0; border-radius: 0;
+  color: inherit; font-size: inherit; font-weight: inherit; word-break: normal;
+}
 .code pre {
   margin: 0; padding: 12px 48px 12px 17.6px; overflow-x: auto;
   font-family: var(--font-mono); font-size: 13.5px; line-height: 20px; color: var(--code-fg);
@@ -262,6 +266,7 @@ details.data th, details.data td { padding: 5px 10px; }
   appearance: none; cursor: pointer; border: 1px solid var(--accent-line); background: var(--accent-soft);
   color: var(--accent-strong); font-family: var(--font-mono); font-size: 12px; letter-spacing: .6px;
   padding: 7px 15px; border-radius: 3px; display: inline-flex; align-items: center; gap: 9px;
+  white-space: nowrap; flex: 0 0 auto;
   transition: background .15s, transform .1s;
 }
 .play:hover { background: rgba(255, 46, 151, 0.22); }
@@ -667,15 +672,15 @@ page.on("response", async (r) =&gt; {
 
 <p>运行时的版本：Bun <code>1.4.4-canary.1</code>（带上面提到的 Request 修复），Node <code>26.7.0</code>。每一项测量至少跑两遍，文章中写的是稳定值；Vite 的构建时间波动在 ±10% 以内，Next 的冷构建波动更小（它的耗时主要由 CPU 决定）。</p>
 
-<h2 id="verdict"><span class="num">07</span>所以，值得迁吗<a href="#verdict" class="anchor" aria-label="Permalink">#</a></h2>
+<h2 id="verdict"><span class="num">07</span>写在最后<a href="#verdict" class="anchor" aria-label="Permalink">#</a></h2>
 
-<p>如果你和我一样，是一个人在维护一个本机/小规模部署的 Next.js 应用，迁移动力主要来自开发体验：<strong>每次构建从半分钟变成五秒，这个差别会改变你提交代码的节奏</strong>。加上产物目录从 727 MB 变成 19 MB，clone 和 CI 都轻了一截。</p>
+<p>搬迁本身花了一天，其中小半天是在排查那个 Bun 的 <code>Request</code> bug——我从怀疑 vinext 开始，最后发现问题在运行时里躺了很久。真正让我决定迁完不迁回去的瞬间很朴素：第一次改完一行代码再构建，只等了五秒。之前那半分钟里，我通常会顺手去刷会儿手机。</p>
 
-<p>但如果你的瓶颈是首屏性能、是 SEO、是边缘部署，那这次搬迁不会直接帮你——首屏字节数没变，服务器启动还变慢了。这些地方该做的优化（拆包、缓存策略、流式渲染）迁移前后一样要做。</p>
+<p>这次也更让我信一件事：<strong>测试跑起来之前，什么都不算验证完</strong>。三个坑里有两个是浏览器端到端测试逮到的，单测全绿、类型干净、构建成功，一样看不出来。</p>
 
-<p>至于风险：vinext 是个年轻的项目，兼容性是「覆盖主流用法」而不是「全部」。动手之前先跑一遍 <code>vinext check</code>，再确认你的测试套件能跑起来——我这次三个坑全是测试跑起来之后才发现的。对一个功能已经稳定的项目来说，先在有测试护航的分支上试一次，成本是一天。</p>
+<p>迁移之后的日常：构建五秒，产物目录 19 MB，CI 里少下一半的东西。首屏该多快还是多快——那部分是另一件事，和换不换打包器没关系。</p>
 
-<p>项目在这边：<a href="https://github.com/brynne8/pi-web-bun">pi-web-bun</a>（迁移在 <code>try/vinext</code> 分支），vinext 在 <a href="https://github.com/cloudflare/vinext">cloudflare/vinext</a>。Bun 那个 bug 的修复进展在 <a href="https://github.com/oven-sh/bun/pull/46528">oven-sh/bun#46528</a>。</p>
+<p>项目在这边：<a href="https://github.com/brynne8/pi-web-bun">pi-web-bun</a>（迁移在 <code>try/vinext</code> 分支），vinext 在 <a href="https://github.com/cloudflare/vinext">cloudflare/vinext</a>，Bun 那个 bug 的修复进展在 <a href="https://github.com/oven-sh/bun/pull/46528">oven-sh/bun#46528</a>。要是你也在折腾同样的东西，欢迎来聊聊。</p>
 
 <hr>
 <p class="footnote">文中所有数据由作者于 2026-10-25 在 Apple Silicon macOS 上实测。图表为纯手写 SVG + CSS 实现，无图片、无第三方图表库；语法高亮同为手写分词器。</p>

@@ -178,15 +178,15 @@ page.on("response", async (r) => {
 
 运行时的版本：Bun `1.4.4-canary.1`（带上面提到的 Request 修复），Node `26.7.0`。每一项测量至少跑两遍，文章中写的是稳定值；Vite 的构建时间波动在 ±10% 以内，Next 的冷构建波动更小（它的耗时主要由 CPU 决定）。
 
-## 07 所以，值得迁吗
+## 07 写在最后
 
-如果你和我一样，是一个人在维护一个本机/小规模部署的 Next.js 应用，迁移动力主要来自开发体验：**每次构建从半分钟变成五秒，这个差别会改变你提交代码的节奏**。加上产物目录从 727 MB 变成 19 MB，clone 和 CI 都轻了一截。
+搬迁本身花了一天，其中小半天是在排查那个 Bun 的 `Request` bug——我从怀疑 vinext 开始，最后发现问题在运行时里躺了很久。真正让我决定迁完不迁回去的瞬间很朴素：第一次改完一行代码再构建，只等了五秒。之前那半分钟里，我通常会顺手去刷会儿手机。
 
-但如果你的瓶颈是首屏性能、是 SEO、是边缘部署，那这次搬迁不会直接帮你——首屏字节数没变，服务器启动还变慢了。这些地方该做的优化（拆包、缓存策略、流式渲染）迁移前后一样要做。
+这次也更让我信一件事：**测试跑起来之前，什么都不算验证完**。三个坑里有两个是浏览器端到端测试逮到的，单测全绿、类型干净、构建成功，一样看不出来。
 
-至于风险：vinext 是个年轻的项目，兼容性是「覆盖主流用法」而不是「全部」。动手之前先跑一遍 `vinext check`，再确认你的测试套件能跑起来——我这次三个坑全是测试跑起来之后才发现的。对一个功能已经稳定的项目来说，先在有测试护航的分支上试一次，成本是一天。
+迁移之后的日常：构建五秒，产物目录 19 MB，CI 里少下一半的东西。首屏该多快还是多快——那部分是另一件事，和换不换打包器没关系。
 
-项目在这边：[pi-web-bun](https://github.com/brynne8/pi-web-bun)（迁移在 `try/vinext` 分支），vinext 在 [cloudflare/vinext](https://github.com/cloudflare/vinext)。Bun 那个 bug 的修复进展在 [oven-sh/bun#46528](https://github.com/oven-sh/bun/pull/46528)。
+项目在这边：[pi-web-bun](https://github.com/brynne8/pi-web-bun)（迁移在 `try/vinext` 分支），vinext 在 [cloudflare/vinext](https://github.com/cloudflare/vinext)，Bun 那个 bug 的修复进展在 [oven-sh/bun#46528](https://github.com/oven-sh/bun/pull/46528)。要是你也在折腾同样的东西，欢迎来聊聊。
 
 ---
 
